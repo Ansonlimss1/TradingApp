@@ -1,49 +1,66 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
 # -------------------------
+# SAFE IMPORT HANDLING
+# -------------------------
+try:
+    import yfinance as yf
+except ImportError:
+    st.error("❌ yfinance is not installed. Run: pip install yfinance")
+    st.stop()
+
+# -------------------------
 # PAGE CONFIG
 # -------------------------
-st.set_page_config(page_title="XAUUSD Predictor", layout="wide")
+st.set_page_config(page_title="XAUUSD Trading App", layout="wide")
 
-st.title("📊 XAUUSD Live Trading Signal App")
+st.title("📊 XAUUSD Live Trading Signal App (Stable Version)")
 st.write("Educational tool only — NOT financial advice")
 
 # -------------------------
-# LOAD DATA SAFELY
+# LOAD DATA WITH FALLBACK
 # -------------------------
 @st.cache_data
 def load_data():
-    try:
-        data = yf.download("XAUUSD=X", period="6mo", interval="1h")
-        return data
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return pd.DataFrame()
+    symbols = ["XAUUSD=X", "GC=F"]  # fallback system
+
+    for symbol in symbols:
+        try:
+            data = yf.download(symbol, period="6mo", interval="1h")
+
+            if data is not None and not data.empty:
+                st.success(f"✅ Data loaded from {symbol}")
+                return data
+
+        except Exception:
+            continue
+
+    return pd.DataFrame()
 
 df = load_data()
 
 # -------------------------
-# CHECK DATA
+# HANDLE EMPTY DATA
 # -------------------------
-if df is None or df.empty:
-    st.error("❌ No data loaded. Please check internet or try again later.")
+if df.empty:
+    st.error("❌ Failed to load market data. Try again later.")
     st.stop()
 
-# Debug view (IMPORTANT for you)
-st.subheader("📌 Raw Data Preview")
+# -------------------------
+# SHOW RAW DATA
+# -------------------------
+st.subheader("📌 Market Data Preview")
 st.write(df.tail())
 
 # -------------------------
-# INDICATORS (SAFE CALCULATION)
+# INDICATORS
 # -------------------------
-df["SMA_20"] = df["Close"].rolling(window=20).mean()
-df["SMA_50"] = df["Close"].rolling(window=50).mean()
+df["SMA_20"] = df["Close"].rolling(20).mean()
+df["SMA_50"] = df["Close"].rolling(50).mean()
 
-# RSI calculation
 delta = df["Close"].diff()
 gain = delta.clip(lower=0).rolling(14).mean()
 loss = (-delta.clip(upper=0)).rolling(14).mean()
@@ -51,7 +68,6 @@ loss = (-delta.clip(upper=0)).rolling(14).mean()
 rs = gain / loss
 df["RSI"] = 100 - (100 / (1 + rs))
 
-# Remove NaN rows safely
 df = df.dropna()
 
 # -------------------------
@@ -89,11 +105,11 @@ col3.metric("📊 Signal", signal)
 st.subheader("📈 Gold Price Chart")
 
 fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(df["Close"], label="Close Price")
+ax.plot(df["Close"], label="Price")
 ax.plot(df["SMA_20"], label="SMA 20")
 ax.plot(df["SMA_50"], label="SMA 50")
-ax.legend()
 ax.set_title("XAUUSD Trend Analysis")
+ax.legend()
 
 st.pyplot(fig)
 
@@ -114,5 +130,5 @@ st.pyplot(fig2)
 # -------------------------
 # FOOTER
 # -------------------------
-st.info("Data source: Yahoo Finance (XAUUSD=X). Refresh page for updates.")
-st.warning("⚠ This is NOT a real trading predictor. Use for learning only.")
+st.info("Data source: Yahoo Finance. Refresh to update.")
+st.warning("⚠ Not financial advice. For learning only.")
