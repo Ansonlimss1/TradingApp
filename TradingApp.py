@@ -1,44 +1,47 @@
 import streamlit as st
 import requests
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="REAL XAUUSD BOT", layout="wide")
+st.set_page_config(page_title="XAUUSD REAL Bot", layout="wide")
+
 st.title("🔥 REAL XAUUSD Live Trading Bot")
-
-st.write("⚠️ Using real gold price API (NOT Yahoo Finance)")
+st.write("⚠️ Real data source (metals.live API)")
 
 # -------------------------
-# GET REAL LIVE PRICE
+# GET REAL PRICE (FIXED)
 # -------------------------
-def get_live_price():
+def get_price():
     try:
-        url = "https://gold-api.com/price/XAU"
-        response = requests.get(url)
-        data = response.json()
-        return float(data["price"])
-    except:
+        url = "https://api.metals.live/v1/spot/gold"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+        
+        # format: [[timestamp, price]]
+        price = float(data[0][1])
+        return price
+    except Exception as e:
         return None
 
-price = get_live_price()
+price = get_price()
 
 if price is None:
-    st.error("❌ Failed to get real price")
+    st.error("❌ Failed to fetch real XAUUSD price (API blocked or down)")
     st.stop()
 
 # -------------------------
-# FAKE MINI DATA (FOR INDICATORS)
+# CREATE MINI DATA FOR INDICATORS
 # -------------------------
-# We simulate recent candles (since API gives only current price)
-prices = [price + np.random.uniform(-10, 10) for _ in range(50)]
+# (Because API gives only latest price)
+prices = [price + np.random.uniform(-5, 5) for _ in range(100)]
 df = pd.DataFrame(prices, columns=["Close"])
 
 # -------------------------
 # INDICATORS
 # -------------------------
-df["SMA_20"] = df["Close"].rolling(20).mean()
-df["SMA_50"] = df["Close"].rolling(50).mean()
+df["SMA20"] = df["Close"].rolling(20).mean()
+df["SMA50"] = df["Close"].rolling(50).mean()
 
 delta = df["Close"].diff()
 gain = delta.clip(lower=0).rolling(14).mean()
@@ -50,12 +53,12 @@ df["RSI"] = df["RSI"].fillna(50)
 latest = df.iloc[-1]
 
 # -------------------------
-# SIGNAL
+# SIGNAL LOGIC
 # -------------------------
 buy = 0
 sell = 0
 
-if latest["SMA_20"] > latest["SMA_50"]:
+if latest["SMA20"] > latest["SMA50"]:
     buy += 1
 else:
     sell += 1
@@ -75,16 +78,14 @@ else:
 # -------------------------
 # TRADE LEVELS
 # -------------------------
-atr = 10  # simple fixed ATR since no OHLC
-
 entry = price
 
 if signal == "🟢 BUY":
-    sl = price - 20
-    tp = price + 30
+    sl = price - 15
+    tp = price + 25
 elif signal == "🔴 SELL":
-    sl = price + 20
-    tp = price - 30
+    sl = price + 15
+    tp = price - 25
 else:
     sl = price - 10
     tp = price + 10
@@ -115,4 +116,5 @@ ax.plot(df["Close"], label="Simulated Price")
 ax.legend()
 st.pyplot(fig)
 
-st.warning("⚠️ Real price ✔️ | Indicators simulated ❗")
+st.info("✔ Real price | ❗ Indicators simulated")
+st.warning("⚠️ Not financial advice")
