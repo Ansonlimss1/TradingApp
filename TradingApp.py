@@ -7,9 +7,11 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+# -------------------------
+# PAGE CONFIG
+# -------------------------
 st.set_page_config(page_title="XAUUSD Trading Bot", layout="wide")
-
-st.title("🤖 XAUUSD Trading Bot (Stable Version)")
+st.title("🤖 XAUUSD Trading Bot (Stable Production Version)")
 
 # -------------------------
 # LOAD DATA
@@ -30,6 +32,16 @@ df = load_data()
 if df.empty:
     st.error("❌ Failed to load data")
     st.stop()
+
+# -------------------------
+# FIX YFINANCE MULTI-COLUMN BUG
+# -------------------------
+if isinstance(df.columns, pd.MultiIndex):
+    df.columns = df.columns.get_level_values(0)
+
+for col in ["Open", "High", "Low", "Close", "Volume"]:
+    if col in df.columns and isinstance(df[col], pd.DataFrame):
+        df[col] = df[col].iloc[:, 0]
 
 # -------------------------
 # INDICATORS
@@ -54,9 +66,8 @@ df["RSI"] = df["RSI"].fillna(50)
 # MACD
 df["MACD"] = df["EMA_12"] - df["EMA_26"]
 df["Signal_Line"] = df["MACD"].ewm(span=9, adjust=False).mean()
-df["MACD_Histogram"] = df["MACD"] - df["Signal_Line"]
 
-# Bollinger
+# Bollinger Bands
 df["BB_Mid"] = df["Close"].rolling(20).mean()
 df["BB_Std"] = df["Close"].rolling(20).std()
 df["BB_Upper"] = df["BB_Mid"] + 2 * df["BB_Std"]
@@ -68,24 +79,24 @@ df["TR"] = (df[["High","Low","Close"]]
                     HC=lambda x: abs(x["High"]-x["Close"].shift()),
                     LC=lambda x: abs(x["Low"]-x["Close"].shift()))
             [["HL","HC","LC"]].max(axis=1))
-df["ATR"] = df["TR"].rolling(14).mean()
-df["ATR"] = df["ATR"].fillna(df["ATR"].mean())
+df["ATR"] = df["TR"].rolling(14).mean().fillna(method="bfill")
 
 # -------------------------
-# FIXED STOCHASTIC
+# SAFE STOCHASTIC
 # -------------------------
 df["Low_14"] = df["Low"].rolling(14).min()
 df["High_14"] = df["High"].rolling(14).max()
 
 diff = (df["High_14"] - df["Low_14"]).replace(0, np.nan)
 
-df["Stochastic"] = 100 * (df["Close"] - df["Low_14"]) / diff
+close = df["Close"].squeeze()
+low14 = df["Low_14"].squeeze()
+
+df["Stochastic"] = 100 * (close - low14) / diff
 df["Stochastic"] = df["Stochastic"].replace([np.inf, -np.inf], np.nan).fillna(50)
 
-df["Stochastic_SMA"] = df["Stochastic"].rolling(3).mean().fillna(50)
-
 # -------------------------
-# FIXED CCI
+# SAFE CCI
 # -------------------------
 df["TP"] = (df["High"] + df["Low"] + df["Close"]) / 3
 tp_mean = df["TP"].rolling(20).mean()
@@ -95,7 +106,7 @@ df["CCI"] = (df["TP"] - tp_mean) / (0.015 * tp_std)
 df["CCI"] = df["CCI"].replace([np.inf, -np.inf], np.nan).fillna(0)
 
 # -------------------------
-# FIXED ADX
+# SAFE ADX
 # -------------------------
 df["Plus_DM"] = (df["High"] - df["High"].shift()).clip(lower=0)
 df["Minus_DM"] = (df["Low"].shift() - df["Low"]).clip(lower=0)
@@ -108,11 +119,13 @@ di_sum = (df["Plus_DI"] + df["Minus_DI"]).replace(0, np.nan)
 df["ADX"] = abs(df["Plus_DI"] - df["Minus_DI"]) / di_sum * 100
 df["ADX"] = df["ADX"].replace([np.inf, -np.inf], np.nan).fillna(20)
 
-# Clean
+# -------------------------
+# CLEAN DATA
+# -------------------------
 df = df.dropna()
 
 # -------------------------
-# SIGNAL
+# SIGNAL LOGIC
 # -------------------------
 latest = df.iloc[-1]
 
@@ -150,22 +163,23 @@ elif sell > buy:
 # -------------------------
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Price", f"{latest['Close']:.2f}")
-col2.metric("RSI", f"{latest['RSI']:.2f}")
-col3.metric("Signal", signal)
+col1.metric("💰 Price", f"{latest['Close']:.2f}")
+col2.metric("📉 RSI", f"{latest['RSI']:.2f}")
+col3.metric("📊 Signal", signal)
 
 # -------------------------
 # CHART
 # -------------------------
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(figsize=(10,5))
 ax.plot(df["Close"], label="Price")
-ax.plot(df["SMA_20"], label="SMA20")
-ax.plot(df["SMA_50"], label="SMA50")
+ax.plot(df["SMA_20"], label="SMA 20")
+ax.plot(df["SMA_50"], label="SMA 50")
 ax.legend()
+ax.set_title("XAUUSD Trend")
 st.pyplot(fig)
 
 # -------------------------
-# INFO
+# FOOTER
 # -------------------------
-st.write("Indicators working: RSI, MACD, SMA, Stochastic, CCI, ADX")
-st.warning("⚠️ Educational use only")
+st.info("Data source: Yahoo Finance")
+st.warning("⚠️ For educational purposes only")
