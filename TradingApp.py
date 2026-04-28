@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import time
+from streamlit_autorefresh import st_autorefresh
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -13,13 +13,11 @@ st.title("🤖 XAUUSD Live Trading Bot")
 st.write("⚠️ Educational only — not financial advice")
 
 # -------------------------
-# AUTO REFRESH (LIVE FEEL)
+# AUTO REFRESH (FIXED)
 # -------------------------
 refresh_rate = st.sidebar.slider("Refresh (seconds)", 5, 60, 10)
-st.sidebar.write("App auto-refreshing...")
 
-time.sleep(refresh_rate)
-st.rerun()
+st_autorefresh(interval=refresh_rate * 1000, key="datarefresh")
 
 # -------------------------
 # LOAD DATA
@@ -38,7 +36,7 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.error("❌ Failed to load live data")
+    st.error("❌ Failed to load data (Yahoo may block request)")
     st.stop()
 
 # -------------------------
@@ -61,7 +59,7 @@ rs = gain / loss
 df["RSI"] = 100 - (100 / (1 + rs))
 df["RSI"] = df["RSI"].fillna(50)
 
-# ATR (for SL/TP)
+# ATR
 df["HL"] = df["High"] - df["Low"]
 df["HC"] = abs(df["High"] - df["Close"].shift())
 df["LC"] = abs(df["Low"] - df["Close"].shift())
@@ -75,7 +73,7 @@ price = latest["Close"]
 atr = latest["ATR"]
 
 # -------------------------
-# SIGNAL LOGIC
+# SIGNAL
 # -------------------------
 buy = 0
 sell = 0
@@ -90,26 +88,23 @@ if latest["RSI"] < 30:
 elif latest["RSI"] > 70:
     sell += 1
 
-# -------------------------
-# DECISION + PRICE LEVELS
-# -------------------------
 if buy > sell:
     signal = "🟢 BUY"
     entry = price
-    stop_loss = price - (2 * atr)
-    take_profit = price + (3 * atr)
+    sl = price - 2 * atr
+    tp = price + 3 * atr
 
 elif sell > buy:
     signal = "🔴 SELL"
     entry = price
-    stop_loss = price + (2 * atr)
-    take_profit = price - (3 * atr)
+    sl = price + 2 * atr
+    tp = price - 3 * atr
 
 else:
     signal = "🟡 HOLD"
     entry = price
-    stop_loss = price - atr
-    take_profit = price + atr
+    sl = price - atr
+    tp = price + atr
 
 # -------------------------
 # DISPLAY
@@ -122,46 +117,34 @@ col3.metric("📊 Signal", signal)
 
 st.divider()
 
-# -------------------------
-# TRADE SETUP
-# -------------------------
+# Trade setup
 st.subheader("📍 Trade Setup")
 
 c1, c2, c3 = st.columns(3)
+c1.metric("Entry", f"{entry:.2f}")
+c2.metric("Stop Loss", f"{sl:.2f}")
+c3.metric("Take Profit", f"{tp:.2f}")
 
-c1.metric("Entry Price", f"{entry:.2f}")
-c2.metric("Stop Loss", f"{stop_loss:.2f}")
-c3.metric("Take Profit", f"{take_profit:.2f}")
-
-# Risk Reward
-risk = abs(entry - stop_loss)
-reward = abs(take_profit - entry)
-
+# Risk reward
+risk = abs(entry - sl)
+reward = abs(tp - entry)
 if risk > 0:
-    rr = reward / risk
-    st.metric("Risk/Reward", f"1 : {rr:.2f}")
+    st.metric("Risk/Reward", f"1 : {reward/risk:.2f}")
 
 # -------------------------
 # CHART
 # -------------------------
-st.subheader("📈 Live Chart")
-
 fig, ax = plt.subplots(figsize=(10,5))
 
 ax.plot(df["Close"], label="Price")
 ax.plot(df["SMA_20"], label="SMA20")
 ax.plot(df["SMA_50"], label="SMA50")
 
-# Plot entry/SL/TP
 ax.axhline(entry, linestyle="--", label="Entry")
-ax.axhline(stop_loss, linestyle="--", label="SL")
-ax.axhline(take_profit, linestyle="--", label="TP")
+ax.axhline(sl, linestyle="--", label="SL")
+ax.axhline(tp, linestyle="--", label="TP")
 
 ax.legend()
 st.pyplot(fig)
 
-# -------------------------
-# INFO
-# -------------------------
 st.info(f"🔄 Refreshing every {refresh_rate} seconds")
-st.warning("⚠️ Not real trading advice. Market can change fast.")
