@@ -52,6 +52,26 @@ with st.sidebar:
     st.markdown("**Bot Sensitivity**")
     rsi_threshold = st.slider("RSI Threshold:", 20, 50, 30)
     macd_strength = st.slider("MACD Strength:", 0.1, 1.0, 0.5, step=0.1)
+    
+    st.divider()
+    st.markdown("**🔧 Diagnostics**")
+    
+    if st.button("🔄 Force Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    
+    if st.button("🧪 Test Connection", use_container_width=True):
+        st.info("Testing Yahoo Finance connection...")
+        try:
+            test_data = yf.download("GC=F", period="1d", interval="1h", progress=False)
+            if test_data is not None and len(test_data) > 0:
+                st.success("✅ Connection successful!")
+                st.write(f"Retrieved {len(test_data)} candles")
+            else:
+                st.error("❌ No data returned")
+        except Exception as e:
+            st.error(f"❌ Connection failed: {str(e)}")
+
 
 # -------------------------
 # LOAD DATA SAFELY
@@ -59,20 +79,43 @@ with st.sidebar:
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_data(symbol, period, interval):
     try:
-        data = yf.download(symbol, period=period, interval=interval, progress=False)
+        # Show status while downloading
+        with st.spinner("📡 Fetching XAUUSD data from Yahoo Finance..."):
+            data = yf.download(symbol, period=period, interval=interval, progress=False)
+        
+        if data is None or len(data) == 0:
+            return None
+        
         return data
     except Exception as e:
-        st.error(f"❌ Error loading data: {e}")
-        return pd.DataFrame()
+        st.error(f"❌ Error loading data: {str(e)}")
+        st.info("💡 Troubleshooting tips:\n- Check internet connection\n- Yahoo Finance may be temporarily unavailable\n- Try refreshing the page (F5)\n- Try a different timeframe")
+        return None
 
-with st.spinner("📡 Loading live XAUUSD data..."):
-    df = load_data("XAUUSD=X", period, interval)
+# Try to load data
+df = load_data("XAUUSD=X", period, interval)
+
+# If main symbol fails, try alternative
+if df is None or df.empty:
+    st.warning("⚠️ Trying alternative data source...")
+    try:
+        df = load_data("GC=F", "6mo", "1h")  # Gold futures as backup
+        if df is not None and not df.empty:
+            st.success("✅ Successfully loaded Gold Futures data")
+    except:
+        df = None
 
 # -------------------------
 # CHECK DATA
 # -------------------------
 if df is None or df.empty:
-    st.error("❌ No data loaded. Please check internet or try again later.")
+    st.error("❌ No data loaded. Unable to fetch XAUUSD data.")
+    st.error("**Possible causes:**")
+    st.error("1. ⚠️ Yahoo Finance API is temporarily unavailable")
+    st.error("2. 🌐 Check your internet connection")
+    st.error("3. 🔄 Try refreshing the page (Press F5)")
+    st.error("4. ⏱️ Wait a few minutes and try again")
+    st.error("\n**Note:** Yahoo Finance sometimes blocks automated requests. This is normal.")
     st.stop()
 
 # -------------------------
