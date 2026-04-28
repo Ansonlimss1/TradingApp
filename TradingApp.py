@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from streamlit_autorefresh import st_autorefresh
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -13,11 +12,13 @@ st.title("🤖 XAUUSD Live Trading Bot")
 st.write("⚠️ Educational only — not financial advice")
 
 # -------------------------
-# AUTO REFRESH (FIXED)
+# REFRESH CONTROL (SAFE)
 # -------------------------
-refresh_rate = st.sidebar.slider("Refresh (seconds)", 5, 60, 10)
+st.sidebar.header("⚙️ Controls")
 
-st_autorefresh(interval=refresh_rate * 1000, key="datarefresh")
+if st.sidebar.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
 
 # -------------------------
 # LOAD DATA
@@ -88,6 +89,9 @@ if latest["RSI"] < 30:
 elif latest["RSI"] > 70:
     sell += 1
 
+# -------------------------
+# TRADE DECISION
+# -------------------------
 if buy > sell:
     signal = "🟢 BUY"
     entry = price
@@ -117,7 +121,9 @@ col3.metric("📊 Signal", signal)
 
 st.divider()
 
-# Trade setup
+# -------------------------
+# TRADE SETUP
+# -------------------------
 st.subheader("📍 Trade Setup")
 
 c1, c2, c3 = st.columns(3)
@@ -125,15 +131,18 @@ c1.metric("Entry", f"{entry:.2f}")
 c2.metric("Stop Loss", f"{sl:.2f}")
 c3.metric("Take Profit", f"{tp:.2f}")
 
-# Risk reward
+# Risk Reward
 risk = abs(entry - sl)
 reward = abs(tp - entry)
+
 if risk > 0:
     st.metric("Risk/Reward", f"1 : {reward/risk:.2f}")
 
 # -------------------------
 # CHART
 # -------------------------
+st.subheader("📈 Price Chart")
+
 fig, ax = plt.subplots(figsize=(10,5))
 
 ax.plot(df["Close"], label="Price")
@@ -147,4 +156,8 @@ ax.axhline(tp, linestyle="--", label="TP")
 ax.legend()
 st.pyplot(fig)
 
-st.info(f"🔄 Refreshing every {refresh_rate} seconds")
+# -------------------------
+# FOOTER
+# -------------------------
+st.info("Click 'Refresh Data' to update price")
+st.warning("⚠️ Not financial advice")
