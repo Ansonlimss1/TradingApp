@@ -145,6 +145,7 @@ gain = delta.clip(lower=0).rolling(14).mean()
 loss = (-delta.clip(upper=0)).rolling(14).mean()
 rs = gain / loss
 df["RSI"] = 100 - (100 / (1 + rs))
+df["RSI"] = df["RSI"].fillna(50)  # Fill NaN with neutral value
 
 # MACD
 df["MACD"] = df["EMA_12"] - df["EMA_26"]
@@ -157,27 +158,40 @@ df["High_Close"] = abs(df["High"] - df["Close"].shift(1))
 df["Low_Close"] = abs(df["Low"] - df["Close"].shift(1))
 df["TR"] = df[["High_Low", "High_Close", "Low_Close"]].max(axis=1)
 df["ATR"] = df["TR"].rolling(window=14).mean()
+df["ATR"] = df["ATR"].fillna(df["ATR"].mean())  # Fill NaN with mean
 
 # ADX (Average Directional Index)
 df["Plus_DM"] = np.where((df["High"] - df["High"].shift(1)) > (df["Low"].shift(1) - df["Low"]), 
                           df["High"] - df["High"].shift(1), 0)
 df["Minus_DM"] = np.where((df["Low"].shift(1) - df["Low"]) > (df["High"] - df["High"].shift(1)), 
                            df["Low"].shift(1) - df["Low"], 0)
-df["Plus_DI"] = 100 * (df["Plus_DM"].rolling(window=14).mean() / df["ATR"])
-df["Minus_DI"] = 100 * (df["Minus_DM"].rolling(window=14).mean() / df["ATR"])
-df["ADX"] = abs(df["Plus_DI"] - df["Minus_DI"]) / (df["Plus_DI"] + df["Minus_DI"]) * 100
 
-# Stochastic Oscillator
+# Handle division by zero in DI calculations
+df["Plus_DI"] = np.where(df["ATR"] != 0, 100 * (df["Plus_DM"].rolling(window=14).mean() / df["ATR"]), 0)
+df["Minus_DI"] = np.where(df["ATR"] != 0, 100 * (df["Minus_DM"].rolling(window=14).mean() / df["ATR"]), 0)
+
+# ADX calculation with division by zero handling
+di_sum = df["Plus_DI"] + df["Minus_DI"]
+df["ADX"] = np.where(di_sum != 0, abs(df["Plus_DI"] - df["Minus_DI"]) / di_sum * 100, 0)
+df["ADX"] = df["ADX"].fillna(20)  # Fill NaN with neutral value
+
+# Stochastic Oscillator with division by zero handling
 df["Low_14"] = df["Low"].rolling(window=14).min()
 df["High_14"] = df["High"].rolling(window=14).max()
-df["Stochastic"] = 100 * ((df["Close"] - df["Low_14"]) / (df["High_14"] - df["Low_14"]))
+high_low_diff = df["High_14"] - df["Low_14"]
+df["Stochastic"] = np.where(high_low_diff != 0, 100 * ((df["Close"] - df["Low_14"]) / high_low_diff), 50)
+df["Stochastic"] = df["Stochastic"].fillna(50)  # Fill NaN with neutral value
 df["Stochastic_SMA"] = df["Stochastic"].rolling(window=3).mean()
+df["Stochastic_SMA"] = df["Stochastic_SMA"].fillna(50)
 
 # CCI (Commodity Channel Index)
 df["TP"] = (df["High"] + df["Low"] + df["Close"]) / 3
-df["CCI"] = (df["TP"] - df["TP"].rolling(window=20).mean()) / (0.015 * df["TP"].rolling(window=20).std())
+tp_mean = df["TP"].rolling(window=20).mean()
+tp_std = df["TP"].rolling(window=20).std()
+df["CCI"] = np.where(tp_std != 0, (df["TP"] - tp_mean) / (0.015 * tp_std), 0)
+df["CCI"] = df["CCI"].fillna(0)  # Fill NaN with neutral value
 
-# Remove NaN rows
+# Remove rows with any NaN values that might remain
 df = df.dropna()
 
 # -------------------------
