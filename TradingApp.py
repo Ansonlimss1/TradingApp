@@ -3,15 +3,11 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# -------------------------
-# PAGE CONFIG
-# -------------------------
 st.set_page_config(page_title="XAUUSD Trading Bot", layout="wide")
-st.title("🤖 XAUUSD Trading Bot (Stable Production Version)")
+st.title("🤖 XAUUSD Trading Bot (Stable Final Version)")
 
 # -------------------------
 # LOAD DATA
@@ -34,7 +30,7 @@ if df.empty:
     st.stop()
 
 # -------------------------
-# FIX YFINANCE MULTI-COLUMN BUG
+# FIX MULTI COLUMN BUG
 # -------------------------
 if isinstance(df.columns, pd.MultiIndex):
     df.columns = df.columns.get_level_values(0)
@@ -67,19 +63,23 @@ df["RSI"] = df["RSI"].fillna(50)
 df["MACD"] = df["EMA_12"] - df["EMA_26"]
 df["Signal_Line"] = df["MACD"].ewm(span=9, adjust=False).mean()
 
-# Bollinger Bands
+# Bollinger
 df["BB_Mid"] = df["Close"].rolling(20).mean()
 df["BB_Std"] = df["Close"].rolling(20).std()
 df["BB_Upper"] = df["BB_Mid"] + 2 * df["BB_Std"]
 df["BB_Lower"] = df["BB_Mid"] - 2 * df["BB_Std"]
 
-# ATR
-df["TR"] = (df[["High","Low","Close"]]
-            .assign(HL=lambda x: x["High"]-x["Low"],
-                    HC=lambda x: abs(x["High"]-x["Close"].shift()),
-                    LC=lambda x: abs(x["Low"]-x["Close"].shift()))
-            [["HL","HC","LC"]].max(axis=1))
-df["ATR"] = df["TR"].rolling(14).mean().fillna(method="bfill")
+# -------------------------
+# FIXED ATR
+# -------------------------
+df["HL"] = df["High"] - df["Low"]
+df["HC"] = abs(df["High"] - df["Close"].shift())
+df["LC"] = abs(df["Low"] - df["Close"].shift())
+
+df["TR"] = df[["HL", "HC", "LC"]].max(axis=1)
+
+df["ATR"] = df["TR"].rolling(14).mean()
+df["ATR"] = df["ATR"].bfill()
 
 # -------------------------
 # SAFE STOCHASTIC
@@ -89,10 +89,7 @@ df["High_14"] = df["High"].rolling(14).max()
 
 diff = (df["High_14"] - df["Low_14"]).replace(0, np.nan)
 
-close = df["Close"].squeeze()
-low14 = df["Low_14"].squeeze()
-
-df["Stochastic"] = 100 * (close - low14) / diff
+df["Stochastic"] = 100 * (df["Close"] - df["Low_14"]) / diff
 df["Stochastic"] = df["Stochastic"].replace([np.inf, -np.inf], np.nan).fillna(50)
 
 # -------------------------
@@ -120,15 +117,15 @@ df["ADX"] = abs(df["Plus_DI"] - df["Minus_DI"]) / di_sum * 100
 df["ADX"] = df["ADX"].replace([np.inf, -np.inf], np.nan).fillna(20)
 
 # -------------------------
-# CLEAN DATA
+# CLEAN
 # -------------------------
 df = df.dropna()
 
-# -------------------------
-# SIGNAL LOGIC
-# -------------------------
 latest = df.iloc[-1]
 
+# -------------------------
+# SIGNAL
+# -------------------------
 buy = 0
 sell = 0
 
@@ -170,16 +167,11 @@ col3.metric("📊 Signal", signal)
 # -------------------------
 # CHART
 # -------------------------
-fig, ax = plt.subplots(figsize=(10,5))
+fig, ax = plt.subplots()
 ax.plot(df["Close"], label="Price")
 ax.plot(df["SMA_20"], label="SMA 20")
 ax.plot(df["SMA_50"], label="SMA 50")
 ax.legend()
-ax.set_title("XAUUSD Trend")
 st.pyplot(fig)
 
-# -------------------------
-# FOOTER
-# -------------------------
-st.info("Data source: Yahoo Finance")
-st.warning("⚠️ For educational purposes only")
+st.warning("⚠️ Educational use only")
